@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The LED Is Lying to You — PWM with Arduino</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0e1115; --panel:#161b22; --panel2:#1d232c; --line:#2a323d;
+  --ink:#e9edf2; --dim:#9aa6b4; --green:#5cff9d; --green-d:#1e6b44;
+  --red:#ff4a4a; --amber:#ffb347; --blue:#6cb6ff;
+  --sans:"Space Grotesk",system-ui,-apple-system,Segoe UI,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans)}
+body{overflow:hidden}
+#deck{position:relative;height:100vh;width:100vw}
+.slide{position:absolute;inset:0;display:none;padding:4.5vh 6vw 11vh;overflow-y:auto}
+.slide.active{display:block;animation:fade .35s ease}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.kicker{font-family:var(--mono);font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:var(--green);margin-bottom:10px}
+h1{font-size:clamp(34px,5.4vw,72px);line-height:1.02;margin:0 0 18px;font-weight:700;letter-spacing:-.02em}
+h2{font-size:clamp(26px,3.4vw,44px);line-height:1.1;margin:0 0 16px;font-weight:700;letter-spacing:-.01em}
+h3{font-size:20px;margin:0 0 8px}
+p,li{font-size:clamp(16px,1.35vw,20px);line-height:1.5;color:var(--ink)}
+.dim{color:var(--dim)}
+.big{font-size:clamp(20px,1.8vw,26px)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:3vw;align-items:start}
+.grid2.wide-left{grid-template-columns:1.25fr 1fr}
+@media (max-width:900px){.grid2,.grid2.wide-left{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px}
+.card.tight{padding:14px 16px}
+code,.mono{font-family:var(--mono)}
+pre{font-family:var(--mono);font-size:clamp(13px,1.05vw,16px);line-height:1.55;background:#0a0d10;border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:0 0 14px;overflow-x:auto;color:#d7dee7}
+.k{color:#ff7ab6}.f{color:var(--blue)}.n{color:var(--amber)}.c{color:#6b7887}.s{color:#a5e88f}
+.badge{display:inline-flex;gap:8px;align-items:center;font-family:var(--mono);font-size:13px;background:#2a2112;color:var(--amber);border:1px solid #5a4316;border-radius:999px;padding:5px 12px;margin-bottom:14px}
+.badge::before{content:"✎"}
+.callout{border-left:4px solid var(--amber);background:#1f1a12;padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0}
+.callout.green{border-color:var(--green);background:#122019}
+.callout.red{border-color:var(--red);background:#221314}
+ol.steps{padding-left:1.2em;margin:0}
+ol.steps li{margin:0 0 8px}
+canvas{display:block;width:100%;border-radius:10px;background:#07090b;border:1px solid var(--line)}
+.row{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.ctrl{display:flex;flex-direction:column;gap:6px;margin:12px 0}
+.ctrl label{font-family:var(--mono);font-size:14px;color:var(--dim)}
+.ctrl label b{color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--green);height:28px}
+button.b{font-family:var(--mono);font-size:14px;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:9px 14px;cursor:pointer}
+button.b:hover{border-color:var(--green)}
+button.b.on{background:var(--green-d);border-color:var(--green)}
+.readout{font-family:var(--mono);display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:15px}
+.readout span:nth-child(odd){color:var(--dim)}
+.readout span:nth-child(even){color:var(--ink);font-weight:600}
+.led-wrap{display:flex;align-items:center;justify-content:center;height:190px}
+.led{width:78px;height:78px;border-radius:50%;position:relative;background:#3a1010;border:2px solid #5a2222;transition:none}
+.led::after{content:"";position:absolute;left:18%;top:14%;width:28%;height:22%;border-radius:50%;background:rgba(255,255,255,.25)}
+.legs{width:78px;display:flex;justify-content:space-around;margin:0 auto}
+.legs i{display:block;width:4px;height:44px;background:#9aa;border-radius:2px}
+.legs i:first-child{height:54px}
+.foot{position:fixed;left:0;right:0;bottom:0;height:62px;display:flex;align-items:center;justify-content:space-between;padding:0 3vw;background:linear-gradient(transparent,rgba(14,17,21,.96) 35%);z-index:5}
+.foot .navbtn{font-family:var(--mono);font-size:15px;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 18px;cursor:pointer}
+.foot .navbtn:hover{border-color:var(--green)}
+.prog{flex:1;margin:0 22px;height:4px;background:var(--line);border-radius:2px;overflow:hidden}
+.prog i{display:block;height:100%;background:var(--green);width:0;transition:width .3s}
+.count{font-family:var(--mono);font-size:13px;color:var(--dim);min-width:70px;text-align:center}
+#notes{position:fixed;right:2vw;top:3vh;width:min(440px,92vw);max-height:80vh;overflow:auto;background:#1b1610;border:1px solid #5a4316;border-radius:12px;padding:16px 18px;display:none;z-index:9;font-size:15px;line-height:1.5}
+#notes h4{margin:0 0 8px;font-family:var(--mono);color:var(--amber);font-size:13px;letter-spacing:.1em}
+#notes.show{display:block}
+.title-slide{display:flex !important;flex-direction:column;justify-content:center}
+.title-slide:not(.active){display:none !important}
+.hero-led{display:flex;gap:40px;align-items:center;margin-top:20px;flex-wrap:wrap}
+table.t{border-collapse:collapse;font-family:var(--mono);font-size:15px;width:100%}
+table.t td,table.t th{border:1px solid var(--line);padding:7px 10px;text-align:center}
+table.t th{color:var(--dim);font-weight:400;background:var(--panel2)}
+.tag{display:inline-block;font-family:var(--mono);font-size:12px;padding:2px 8px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);color:var(--dim)}
+.wire-list li{margin-bottom:6px}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+svg text{font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace}
+.hint{font-size:14px;color:var(--dim);font-family:var(--mono)}
+.stepnum{display:inline-block;width:34px;height:34px;border-radius:50%;background:var(--green);color:#06210f;font-weight:700;text-align:center;line-height:34px;margin-right:10px}
+.roadmap{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:18px}
+@media (max-width:900px){.roadmap{grid-template-columns:1fr 1fr}}
+.roadmap .card h3{font-size:17px}
+.roadmap .card p{font-size:15px;margin:4px 0 0;color:var(--dim)}
+</style>
+</head>
+<body>
+<div id="deck">
+
+<!-- 1 TITLE -->
+<section class="slide title-slide" data-notes="Have this up as they walk in. Students open this deck from Classroom and work through at their own pace; the worksheet is how you check that they actually did each step. 60-minute class: ~8 build, ~4 Step 1, ~12 Step 2, ~8 Step 3, ~10 Step 4, ~13 Step 5, ~5 wrap.">
+  <div class="kicker">Robotics 1 · PWM</div>
+  <h1>The LED Is<br>Lying to You.</h1>
+  <p class="big dim" style="max-width:760px">Today you'll catch an LED faking it. Then you'll learn the trick it's using, because it's the same trick your robot car uses to change speed.</p>
+  <div class="hero-led">
+    <div><div class="led" id="heroLed"></div><div class="legs"><i></i><i></i></div></div>
+    <p class="hint">Use → or the Next button to move through the slides.<br>Keep your worksheet next to you. You'll need it.</p>
+  </div>
+</section>
+
+<!-- 2 HOOK -->
+<section class="slide" data-notes="Let them play. At full speed the LED looks dim and steady. Drag 'time speed' down and it turns into blinking. The point: 'dim' is really on-off-on-off, too fast to see. Don't name PWM yet.">
+  <div class="kicker">The hook</div>
+  <h2>This LED looks dim. Is it getting less electricity?</h2>
+  <div class="grid2 wide-left">
+    <div class="card">
+      <div class="led-wrap"><div><div class="led" id="hookLed"></div><div class="legs"><i></i><i></i></div></div></div>
+      <div class="ctrl">
+        <label>Time speed: <b id="hookSpeedLbl">normal</b></label>
+        <input type="range" id="hookSpeed" min="0" max="100" value="0">
+      </div>
+      <p class="hint" id="hookInfo"></p>
+    </div>
+    <div>
+      <p class="big">Slide <b>time speed</b> to the right to slow down time.</p>
+      <p>At normal speed it looks like a dim, steady light.</p>
+      <p>Slow time down and look at what it's <i>really</i> doing.</p>
+      <div class="callout">It isn't half-on. It's <b>all the way on</b>, then <b>all the way off</b>, hundreds of times a second. Your eyes can't keep up, so your brain averages it into "dim."</div>
+      <p class="dim">Don't take my word for it. You're going to build it and prove it yourself.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 3 ROADMAP -->
+<section class="slide" data-notes="Point out that the worksheet has a checkpoint for each step. Some answers are numbers you can only get by doing the build, so skipping ahead won't work. Two teacher checks: Step 2 and Step 5.">
+  <div class="kicker">Today's mission</div>
+  <h2>Five steps to catch the LED in the act</h2>
+  <div class="roadmap">
+    <div class="card"><h3><span class="stepnum">1</span>Human PWM</h3><p>You try to fake "dim" with a button.</p></div>
+    <div class="card"><h3><span class="stepnum">2</span>Slow motion</h3><p>Code a blink, then speed it up until it vanishes.</p></div>
+    <div class="card"><h3><span class="stepnum">3</span>Duty cycle</h3><p>Same speed, different on/off split.</p></div>
+    <div class="card"><h3><span class="stepnum">4</span>The reveal</h3><p><code>analogWrite()</code> and the wave test.</p></div>
+    <div class="card"><h3><span class="stepnum">5</span>The knob</h3><p>A potentiometer controls brightness.</p></div>
+  </div>
+  <div class="callout" style="margin-top:22px">✎ Your worksheet has a <b>checkpoint for every step</b>. Fill it in <i>as you go</i>. Some answers are numbers you can only get from your own breadboard.</div>
+</section>
+
+<!-- 4 BUILD -->
+<section class="slide" data-notes="Same LED circuit they've built before, plus a button. If a button keeps the LED on without being pressed, it's rotated; turn it 90 degrees. Leave the pot for Step 5.">
+  <div class="kicker">Build first</div>
+  <h2>Your starting circuit</h2>
+  <div class="grid2 wide-left">
+    <div class="card"><svg id="buildSvg" viewBox="0 0 640 400" style="width:100%"></svg></div>
+    <div>
+      <ol class="steps wire-list">
+        <li><span class="sw" style="background:var(--red)"></span>Arduino <b>5V</b> → breadboard <b>+ rail</b></li>
+        <li><span class="sw" style="background:var(--blue)"></span>Arduino <b>GND</b> → breadboard <b>− rail</b></li>
+        <li><b>220 Ω resistor</b> from row 10 to row 14</li>
+        <li><b>LED</b>: long leg (+) in row 14, short leg in row 15</li>
+        <li>Jumper: row 15 → <b>− rail</b></li>
+        <li><b>Push-button</b> straddling the center gap at rows 20–22</li>
+        <li>Jumper: <b>+ rail</b> → row 20 &nbsp;·&nbsp; Jumper: row 22 → row 10</li>
+      </ol>
+      <div class="callout">If the LED stays on <i>without</i> pressing, your button is turned sideways. Rotate it 90°.</div>
+      <p class="hint">No code yet. The Arduino is just a 5-volt battery right now.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 5 STEP 1 HUMAN PWM -->
+<section class="slide" data-notes="Most kids get 5–8 taps per second, which still looks like flashing. The takeaway: making 'half bright' this way takes a lot more speed than a human has. That's why we hand the job to the Arduino.">
+  <div class="kicker">Step 1</div>
+  <div class="badge">Worksheet · Checkpoint 1</div>
+  <h2>Human PWM: can <i>you</i> make it look dim?</h2>
+  <div class="grid2">
+    <div>
+      <p class="big">Press the button. The LED is fully on. Let go: fully off.</p>
+      <p>Your challenge: <b>tap the button as fast as you possibly can</b> and try to make the LED look like a steady, half-bright light.</p>
+      <p>Get a neighbor to count your taps for 5 seconds.</p>
+    </div>
+    <div class="card">
+      <h3>What's going on</h3>
+      <p>You can only make <b>on</b> or <b>off</b> with a button. There's no "half."</p>
+      <p>Making it <i>look</i> half-bright means switching faster than your eye can follow. How fast is that? Step 2 finds out.</p>
+      <div class="callout green">The Arduino can switch a pin thousands of times faster than your thumb.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 STEP 2 CODE -->
+<section class="slide" data-notes="Rewire: pull the jumper from row 22 → row 10, and run pin 9 → row 10 instead. The button can stay; it's no longer in the circuit. They start at 500/500 and halve BOTH numbers each upload. Make them record each row; the table is how you know they did it.">
+  <div class="kicker">Step 2 · Slow motion</div>
+  <div class="badge">Worksheet · Checkpoint 2</div>
+  <h2>Hand the switching to the Arduino</h2>
+  <div class="grid2">
+    <div>
+      <p><b>Rewire:</b> remove the jumper from <b>row 22 → row 10</b>. Add a jumper from <b>Arduino pin 9 → row 10</b>.</p>
+      <pre><span class="k">int</span> onTime  = <span class="n">500</span>;   <span class="c">// milliseconds ON</span>
+<span class="k">int</span> offTime = <span class="n">500</span>;   <span class="c">// milliseconds OFF</span>
+
+<span class="k">void</span> <span class="f">setup</span>() {
+  <span class="f">pinMode</span>(<span class="n">9</span>, OUTPUT);
+}
+
+<span class="k">void</span> <span class="f">loop</span>() {
+  <span class="f">digitalWrite</span>(<span class="n">9</span>, HIGH);
+  <span class="f">delay</span>(onTime);
+  <span class="f">digitalWrite</span>(<span class="n">9</span>, LOW);
+  <span class="f">delay</span>(offTime);
+}</pre>
+    </div>
+    <div class="card">
+      <h3>The experiment</h3>
+      <ol class="steps">
+        <li>Upload. You'll see a slow blink (old news).</li>
+        <li><b>Cut both numbers in half</b>: 500 → 250 → 125 → 62 → 31 → 15 → 8 → 4 → 2.</li>
+        <li>After every upload, write in your table: <b>blink</b>, <b>flicker</b>, or <b>steady</b>.</li>
+        <li>Find the row where the blinking <b>disappears</b> for you.</li>
+      </ol>
+      <div class="callout"><b>Flashes per second</b> = 1000 ÷ (onTime + offTime)<br><span class="dim">500 + 500 = 1000 → 1 flash per second</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 7 STEP 2 SIM -->
+<section class="slide" data-notes="This simulator mirrors their code. Screens refresh about 60 times per second, so above ~30 flashes per second the simulator can only show the average. The real test is their own breadboard. Most people's blink vanishes somewhere between 31 and 8 ms.">
+  <div class="kicker">Step 2 · Watch the wave</div>
+  <h2>What pin 9 is doing while you halve the numbers</h2>
+  <div class="grid2 wide-left">
+    <div>
+      <canvas id="slowScope" style="height:240px"></canvas>
+      <p class="hint" id="slowScopeNote" style="margin-top:8px"></p>
+    </div>
+    <div class="card">
+      <div class="led-wrap" style="height:150px"><div><div class="led" id="slowLed"></div><div class="legs"><i></i><i></i></div></div></div>
+      <div class="row" style="justify-content:center">
+        <button class="b" id="slowHalf">½ Cut in half</button>
+        <button class="b" id="slowReset">↺ Back to 500</button>
+      </div>
+      <div class="readout" style="margin-top:16px">
+        <span>onTime</span><span id="slowOn">500 ms</span>
+        <span>offTime</span><span id="slowOff">500 ms</span>
+        <span>flashes / second</span><span id="slowHz">1</span>
+      </div>
+    </div>
+  </div>
+  <div class="callout green">The green line is pin 9's voltage: <b>5 V</b> (HIGH) at the top, <b>0 V</b> (LOW) at the bottom. Notice it <b>never stops at anything in between</b>.</div>
+</section>
+
+<!-- 8 FLICKER FUSION -->
+<section class="slide" data-notes="Flicker fusion threshold: roughly 50–90 Hz for most people, higher at the edge of your vision. Ask who can see flicker out of the corner of their eye; peripheral vision is more sensitive. Movies run at 24 frames per second; many LED bulbs and car tail lights flicker at hundreds of Hz.">
+  <div class="kicker">Why the blink vanished</div>
+  <h2>Your brain is averaging</h2>
+  <div class="grid2">
+    <div>
+      <p class="big">Past a certain speed, your eye and brain stop seeing separate flashes. They blend them into one steady light.</p>
+      <p>This is called <b>flicker fusion</b>. For most people it happens somewhere around <b>50–90 flashes per second</b>.</p>
+      <p>The LED never got dimmer and never got "less electricity." It just started switching faster than you can see.</p>
+    </div>
+    <div class="card">
+      <h3>You've been fooled before</h3>
+      <ul>
+        <li><b>Movies</b>: 24 still pictures per second look like motion.</li>
+        <li><b>LED car tail lights</b>: move your eyes quickly past one at night and you'll see a dotted trail.</li>
+        <li><b>Phone screens</b>: many dim themselves by flickering.</li>
+      </ul>
+      <div class="callout">Try it: look at your LED <b>out of the corner of your eye</b> at the row where it just turned steady. Peripheral vision catches flicker better.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 9 STEP 3 DUTY -->
+<section class="slide" data-notes="Total cycle is always 10 ms = 100 flashes per second, which is too fast to see. Only the split changes. They should rank brightness 9/1 > 7/3 > 5/5 > 3/7 > 1/9. Eyes aren't linear, so 5/5 often looks brighter than 'half'; that's normal.">
+  <div class="kicker">Step 3 · Duty cycle</div>
+  <div class="badge">Worksheet · Checkpoint 3</div>
+  <h2>Same speed. Different split.</h2>
+  <div class="grid2 wide-left">
+    <div>
+      <canvas id="dutyScope" style="height:230px"></canvas>
+      <div class="ctrl">
+        <label>onTime <b id="dutyOnLbl">5</b> ms &nbsp;·&nbsp; offTime <b id="dutyOffLbl">5</b> ms &nbsp;·&nbsp; always 10 ms total</label>
+        <input type="range" id="dutySlider" min="0" max="10" value="5" step="1">
+      </div>
+    </div>
+    <div class="card">
+      <div class="led-wrap" style="height:140px"><div><div class="led" id="dutyLed"></div><div class="legs"><i></i><i></i></div></div></div>
+      <div class="readout">
+        <span>duty cycle</span><span id="dutyPct">50%</span>
+        <span>average voltage</span><span id="dutyV">2.5 V</span>
+        <span>flashes / second</span><span>100 (always)</span>
+      </div>
+      <p style="margin-top:14px"><b>On your Arduino:</b> try these in your code and rank them by brightness:</p>
+      <p class="mono" style="margin:0">9/1 · 7/3 · 5/5 · 3/7 · 1/9</p>
+    </div>
+  </div>
+</section>
+
+<!-- 10 DUTY DEFINED -->
+<section class="slide" data-notes="The orange dashed line on the scope is the average voltage. That's the 'fake' voltage the LED seems to get. Key vocab: PWM = Pulse Width Modulation. Pulse = the on-part. Width = how long it lasts. Modulation = changing it.">
+  <div class="kicker">Name it</div>
+  <h2>PWM = <span style="color:var(--green)">P</span>ulse <span style="color:var(--green)">W</span>idth <span style="color:var(--green)">M</span>odulation</h2>
+  <div class="grid2">
+    <div class="card">
+      <h3>Duty cycle</h3>
+      <p class="big mono">duty = on ÷ (on + off)</p>
+      <p>7 ms on, 3 ms off → 7 ÷ 10 = <b>70%</b></p>
+      <h3 style="margin-top:18px">Average voltage</h3>
+      <p class="big mono">average = duty × 5 V</p>
+      <p>70% × 5 V = <b>3.5 V</b></p>
+    </div>
+    <div>
+      <ul>
+        <li><b>Pulse</b>: one "on" burst</li>
+        <li><b>Width</b>: how long that burst lasts</li>
+        <li><b>Modulation</b>: changing it on purpose</li>
+      </ul>
+      <div class="callout green">A digital pin can only make <b>0 V or 5 V</b>. PWM lets it <i>act like</i> any voltage in between by changing how much of the time it's on.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 11 STEP 4 ANALOGWRITE -->
+<section class="slide" data-notes="analogWrite only works on the ~ pins: 3, 5, 6, 9, 10, 11 on an Uno. Pin 9 runs at about 490 Hz; pins 5 and 6 at about 980 Hz. 0 = always off, 255 = always on. They don't need pinMode for analogWrite, but it doesn't hurt.">
+  <div class="kicker">Step 4 · The reveal</div>
+  <div class="badge">Worksheet · Checkpoint 4</div>
+  <h2>The Arduino has PWM built in</h2>
+  <div class="grid2 wide-left">
+    <div>
+      <canvas id="awScope" style="height:200px"></canvas>
+      <div class="ctrl">
+        <label>analogWrite value: <b id="awLbl">127</b></label>
+        <input type="range" id="awSlider" min="0" max="255" value="127">
+      </div>
+      <pre id="awCode" style="margin-top:6px"></pre>
+    </div>
+    <div class="card">
+      <div class="led-wrap" style="height:130px"><div><div class="led" id="awLed"></div><div class="legs"><i></i><i></i></div></div></div>
+      <div class="readout">
+        <span>duty cycle</span><span id="awPct"></span>
+        <span>average voltage</span><span id="awV"></span>
+        <span>pin 9 speed</span><span>≈ 490 flashes/sec</span>
+      </div>
+      <p style="margin-top:12px">Replace your whole <code>loop()</code> with one line. Upload with <b>0, 64, 127, 191, 255</b>.</p>
+      <p class="hint">Only works on pins with a <b>~</b> next to them: 3, 5, 6, 9, 10, 11.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 12 WAVE TEST -->
+<section class="slide" data-notes="Works best with the lights dimmed. Students keep USB plugged in, hold the Arduino and breadboard together, and sweep them left-right quickly (or sweep a phone camera past the LED). At 64 the trail is clearly dashed; at 255 it's a solid streak. Slow-motion phone video also shows flicker or banding.">
+  <div class="kicker">Step 4 · Catch it in the act</div>
+  <h2>The wave test</h2>
+  <div class="grid2 wide-left">
+    <div>
+      <canvas id="waveCanvas" style="height:270px"></canvas>
+      <div class="row" style="margin-top:10px">
+        <button class="b" data-wave="255">analogWrite(9, 255)</button>
+        <button class="b on" data-wave="64">analogWrite(9, 64)</button>
+        <button class="b" data-wave="191">analogWrite(9, 191)</button>
+      </div>
+      <p class="hint" style="margin-top:6px">Drawn slower than real life so the dashes show on your screen.</p>
+    </div>
+    <div class="card">
+      <h3>Do this on your bench</h3>
+      <ol class="steps">
+        <li>Upload <code>analogWrite(9, 64);</code></li>
+        <li>Dim the lights if you can.</li>
+        <li>Carefully hold your Arduino and breadboard together and <b>sweep them quickly left and right</b>.</li>
+        <li>Look at the trail. Smooth streak or dotted line?</li>
+        <li>Upload <code>255</code> and wave again.</li>
+      </ol>
+      <div class="callout">Bonus: film the LED with your phone's <b>slow-motion</b> mode.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 13 POT INTRO -->
+<section class="slide" data-notes="Pots in the room are either 10K (printed 103) or 100K (printed 104). Both work identically here. If a pot's legs are in a triangle (trimmer), the single leg on one side is the wiper. Keep the LED on pin 9 and leave the button where it is.">
+  <div class="kicker">Step 5 · The knob</div>
+  <div class="badge">Worksheet · Checkpoint 5</div>
+  <h2>Meet the potentiometer</h2>
+  <div class="grid2">
+    <div>
+      <p class="big">A <b>potentiometer</b> ("pot") is a resistor with a slider inside. Turning the knob moves the slider, called the <b>wiper</b>.</p>
+      <ul>
+        <li>Outer leg → <b>+ rail (5 V)</b></li>
+        <li>Other outer leg → <b>− rail (GND)</b></li>
+        <li><b>Middle leg (wiper)</b> → Arduino <b>A0</b></li>
+      </ul>
+      <p>Each leg goes in its <b>own row</b>.</p>
+      <div class="callout"><b>Which pot do you have?</b> Look for a printed number:<br><b>103</b> = 10,000 Ω (10K) &nbsp;·&nbsp; <b>104</b> = 100,000 Ω (100K)<br>Either one works today. Write yours on the worksheet.</div>
+    </div>
+    <div class="card"><svg id="potWireSvg" viewBox="0 0 420 340" style="width:100%"></svg></div>
+  </div>
+</section>
+
+<!-- 14 POT INTERACTIVE -->
+<section class="slide" data-notes="Big idea: the wiper gives a FRACTION of 5 V. Halfway is 2.5 V no matter if the pot is 10K or 100K. Total resistance only changes how much current trickles through the pot. So 10K and 100K students get the same readings. 100K readings may jitter by a few counts; that's normal. analogRead gives 0–1023; analogWrite takes 0–255; divide by 4.">
+  <div class="kicker">Step 5 · Knob → number → PWM</div>
+  <h2>Turn the knob, follow the numbers</h2>
+  <div class="grid2">
+    <div>
+      <div class="card tight">
+        <div class="row" style="margin-bottom:6px">
+          <span class="hint">Pot:</span>
+          <button class="b on" data-pot="10000">10K (103)</button>
+          <button class="b" data-pot="100000">100K (104)</button>
+        </div>
+        <svg id="potSvg" viewBox="0 0 520 210" style="width:100%"></svg>
+        <div class="ctrl">
+          <label>Knob position: <b id="knobLbl">50%</b></label>
+          <input type="range" id="knob" min="0" max="100" value="50">
+        </div>
+      </div>
+      <pre style="margin-top:12px"><span class="k">void</span> <span class="f">setup</span>() {
+  <span class="f">pinMode</span>(<span class="n">9</span>, OUTPUT);
+  <span class="f">Serial</span>.<span class="f">begin</span>(<span class="n">9600</span>);
+}
+
+<span class="k">void</span> <span class="f">loop</span>() {
+  <span class="k">int</span> potValue = <span class="f">analogRead</span>(A0);  <span class="c">// 0 to 1023</span>
+  <span class="k">int</span> brightness = potValue / <span class="n">4</span>;  <span class="c">// 0 to 255</span>
+  <span class="f">analogWrite</span>(<span class="n">9</span>, brightness);
+
+  <span class="f">Serial</span>.<span class="f">print</span>(<span class="s">"pot: "</span>);
+  <span class="f">Serial</span>.<span class="f">print</span>(potValue);
+  <span class="f">Serial</span>.<span class="f">print</span>(<span class="s">"   brightness: "</span>);
+  <span class="f">Serial</span>.<span class="f">println</span>(brightness);
+  <span class="f">delay</span>(<span class="n">50</span>);
+}</pre>
+    </div>
+    <div class="card">
+      <div class="led-wrap" style="height:130px"><div><div class="led" id="potLed"></div><div class="legs"><i></i><i></i></div></div></div>
+      <div class="readout">
+        <span>wiper voltage</span><span id="pWiper"></span>
+        <span>analogRead(A0)</span><span id="pRead"></span>
+        <span>÷ 4 → analogWrite</span><span id="pWrite"></span>
+        <span>duty cycle</span><span id="pDuty"></span>
+        <span>current through pot</span><span id="pI"></span>
+      </div>
+      <canvas id="potScope" style="height:120px;margin-top:14px"></canvas>
+      <div class="callout green" style="margin-top:14px">Switch between 10K and 100K. Which numbers change? Which stay the same? <span class="dim">(That's a worksheet question.)</span></div>
+      <p class="hint">Open Tools → Serial Monitor (9600 baud) to see your real numbers.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 15 WHY NOT A POT -->
+<section class="slide" data-notes="This answers the question someone always asks. A 10K pot in series with a motor lets through at most 0.5 mA, so the motor won't even twitch. A pot rated for motor current would turn the extra energy into heat. And the robot's code can't turn a knob. The pot stays in the circuit as an INPUT; PWM does the work.">
+  <div class="kicker">Someone always asks</div>
+  <h2>"Why not just use the pot to dim the LED, or slow a motor?"</h2>
+  <div class="grid2">
+    <div class="card">
+      <h3 style="color:var(--red)">Pot in the path of the current</h3>
+      <ul>
+        <li>Your 10K pot lets through <b>at most 0.5 mA</b>. A TT motor wants <b>hundreds</b> of mA. It wouldn't even twitch.</li>
+        <li>A pot big enough to carry motor current turns the extra energy into <b>heat</b>.</li>
+        <li>Your robot's code <b>can't turn a knob</b>.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--green)">Pot as an input, PWM does the work</h3>
+      <ul>
+        <li>The pot only carries a tiny <b>signal</b> to A0.</li>
+        <li>The Arduino decides the duty cycle. It could come from a knob, a sensor, or an <code>if</code> statement.</li>
+        <li>An obstacle-avoiding robot can <b>slow itself down</b> as a wall gets close. No hands needed.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout green">The knob <b>tells</b> the Arduino what it wants. PWM <b>does</b> it.</div>
+</section>
+
+<!-- 16 MOTOR -->
+<section class="slide" data-notes="This is the bridge to Robot Car Lesson 2. Slow PWM makes the motor surge and coast; fast PWM is smooth because the motor's momentum averages the pulses, the same way their eyes did. On the L298N, the ENA/ENB pins get the PWM signal, so they have to go to ~ pins.">
+  <div class="kicker">Coming up next</div>
+  <h2>A motor is an LED that can't see.</h2>
+  <div class="grid2 wide-left">
+    <div>
+      <canvas id="motorScope" style="height:200px"></canvas>
+      <div class="row" style="margin-top:10px">
+        <button class="b on" data-mf="3">Slow PWM (3/sec)</button>
+        <button class="b" data-mf="490">Fast PWM (490/sec)</button>
+      </div>
+      <div class="ctrl">
+        <label>analogWrite value: <b id="mLbl">127</b></label>
+        <input type="range" id="mSlider" min="0" max="255" value="127">
+      </div>
+      <p class="hint"><span style="color:var(--green)">green</span> = pin voltage · <span style="color:var(--amber)">orange</span> = motor speed</p>
+    </div>
+    <div class="card">
+      <canvas id="motorCanvas" style="height:200px;background:transparent;border:none"></canvas>
+      <p>Your eye averaged the LED's flashes. A motor's <b>momentum</b> averages PWM pulses the same way. It can't stop and start 490 times a second, so it settles at a speed in between.</p>
+      <div class="callout">On the L298N, the <b>ENA</b> and <b>ENB</b> pins take a PWM signal. That's how your robot car will change speed.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 17 WRAP -->
+<section class="slide" data-notes="Exit ticket is the last box on the worksheet. Collect worksheets before they leave. Have them leave the pot circuit built if the next class doesn't need the boards; otherwise it's a 3-wire rebuild next time.">
+  <div class="kicker">Wrap-up</div>
+  <h2>Case closed.</h2>
+  <div class="grid2">
+    <div>
+      <ul class="big">
+        <li>A digital pin is only ever <b>0 V or 5 V</b>.</li>
+        <li><b>PWM</b> switches it fast enough to fool your eyes (and motors).</li>
+        <li><b>Duty cycle</b> = how much of the time it's on.</li>
+        <li><code>analogWrite(pin, 0–255)</code> sets the duty cycle on <b>~</b> pins.</li>
+        <li><code>analogRead(A0)</code> gives <b>0–1023</b>. Divide by 4 to fit.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Finish your worksheet</h3>
+      <p>Fill in the <b>exit ticket</b> on the last page, then hand it in.</p>
+      <div class="callout green">Next time: the same PWM signal goes into your L298N, and your robot car gets a speed control.</div>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<div class="foot">
+  <button class="navbtn" id="prevBtn">← Back</button>
+  <div class="prog"><i id="progBar"></i></div>
+  <span class="count" id="count"></span>
+  <button class="navbtn" id="nextBtn">Next →</button>
+</div>
+<div id="notes"><h4>TEACHER NOTES · press N to hide</h4><div id="notesBody"></div></div>
+
+<script>
+// ---------- helpers ----------
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+function fit(c){
+  const r=c.getBoundingClientRect(), d=window.devicePixelRatio||1;
+  const w=Math.max(10,Math.round(r.width*d)), h=Math.max(10,Math.round(r.height*d));
+  if(c.width!==w||c.height!==h){c.width=w;c.height=h;}
+  const ctx=c.getContext('2d'); ctx.setTransform(d,0,0,d,0,0);
+  return {ctx,w:r.width,h:r.height};
+}
+function setLed(el,b){ // b 0..1 actual average
+  const p=Math.pow(Math.max(0,Math.min(1,b)),0.6); // perceived
+  const r=Math.round(58+197*p), g=Math.round(16+60*p), bl=Math.round(16+60*p);
+  el.style.background=`rgb(${r},${g},${bl})`;
+  el.style.borderColor=p>0.05?`rgb(255,${Math.round(90+80*p)},${Math.round(90+80*p)})`:'#5a2222';
+  el.style.boxShadow=p>0.02?`0 0 ${10+60*p}px ${4+26*p}px rgba(255,60,60,${0.15+0.55*p})`:'none';
+}
+function grid(ctx,w,h){
+  ctx.fillStyle='#07090b';ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle='#14202a';ctx.lineWidth=1;
+  for(let x=0;x<=w;x+=w/10){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}
+  for(let y=0;y<=h;y+=h/6){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+}
+const PAD=26;
+function yOf(v,h){return h-PAD-(v/5)*(h-2*PAD);}
+function labels(ctx,w,h){
+  ctx.fillStyle='#5f6d7a';ctx.font='12px JetBrains Mono, monospace';
+  ctx.fillText('5 V',6,yOf(5,h)-6);ctx.fillText('0 V',6,yOf(0,h)+16);
+}
+// draw a square wave between t0..t1 (ms) on a canvas, period P, on-time onMs
+function drawWave(ctx,w,h,t0,t1,P,onMs,color='#5cff9d'){
+  ctx.strokeStyle=color;ctx.lineWidth=2.5;ctx.lineJoin='round';ctx.beginPath();
+  const X=t=>(t-t0)/(t1-t0)*w;
+  const hi=yOf(5,h), lo=yOf(0,h);
+  if(onMs<=0){ctx.moveTo(0,lo);ctx.lineTo(w,lo);ctx.stroke();return;}
+  if(onMs>=P){ctx.moveTo(0,hi);ctx.lineTo(w,hi);ctx.stroke();return;}
+  let k=Math.floor(t0/P);
+  const state=t=>((t%P)+P)%P<onMs;
+  ctx.moveTo(0,state(t0)?hi:lo);
+  for(;k*P<t1;k++){
+    const rise=k*P, fall=k*P+onMs;
+    if(rise>t0&&rise<t1){ctx.lineTo(X(rise),lo);ctx.lineTo(X(rise),hi);}
+    if(fall>t0&&fall<t1){ctx.lineTo(X(fall),hi);ctx.lineTo(X(fall),lo);}
+  }
+  ctx.lineTo(w,state(t1-1e-7)?hi:lo);ctx.stroke();
+}
+function avgLine(ctx,w,h,v){
+  ctx.setLineDash([7,6]);ctx.strokeStyle='#ffb347';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(0,yOf(v,h));ctx.lineTo(w,yOf(v,h));ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle='#ffb347';ctx.font='12px JetBrains Mono, monospace';
+  ctx.fillText('average '+v.toFixed(2)+' V',w-150,yOf(v,h)-7);
+}
+
+// ---------- slide engine ----------
+const slides=$$('.slide'); let cur=0;
+function show(i){
+  cur=Math.max(0,Math.min(slides.length-1,i));
+  slides.forEach((s,j)=>s.classList.toggle('active',j===cur));
+  $('#progBar').style.width=((cur+1)/slides.length*100)+'%';
+  $('#count').textContent=(cur+1)+' / '+slides.length;
+  $('#notesBody').textContent=slides[cur].dataset.notes||'';
+  history.replaceState(null,'','#'+(cur+1));
+  slides[cur].scrollTop=0;
+  if(cur===11) resetWave();
+}
+$('#prevBtn').onclick=()=>show(cur-1);
+$('#nextBtn').onclick=()=>show(cur+1);
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT') return;
+  if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){e.preventDefault();show(cur+1);}
+  if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();show(cur-1);}
+  if(e.key==='n'||e.key==='N') $('#notes').classList.toggle('show');
+});
+show((parseInt(location.hash.slice(1))||1)-1);
+
+// ---------- build diagram ----------
+(function(){
+  const s=$('#buildSvg');
+  let g='';
+  // Arduino
+  g+=`<rect x="20" y="60" width="150" height="250" rx="12" fill="#11507a" stroke="#2a78ad"/>
+  <text x="95" y="90" fill="#cfe6f7" font-family="JetBrains Mono" font-size="15" text-anchor="middle">ARDUINO</text>
+  <text x="95" y="108" fill="#8fb8d6" font-family="JetBrains Mono" font-size="11" text-anchor="middle">UNO</text>`;
+  const pins=[['5V',150,'#ff4a4a'],['GND',190,'#6cb6ff'],['~9',240,'#5cff9d'],['A0',280,'#ffb347']];
+  pins.forEach(p=>{g+=`<rect x="152" y="${p[1]-9}" width="18" height="18" rx="3" fill="#0b2c44" stroke="${p[2]}"/><text x="145" y="${p[1]+5}" fill="#e9edf2" font-family="JetBrains Mono" font-size="13" text-anchor="end">${p[0]}</text>`});
+  // breadboard
+  g+=`<rect x="230" y="30" width="390" height="340" rx="10" fill="#e9e4d8" stroke="#c9c2b2"/>
+  <line x1="250" y1="48" x2="600" y2="48" stroke="#d33" stroke-width="2"/><text x="240" y="53" font-size="13" fill="#d33" font-family="JetBrains Mono">+</text>
+  <line x1="250" y1="66" x2="600" y2="66" stroke="#36c" stroke-width="2"/><text x="240" y="71" font-size="14" fill="#36c" font-family="JetBrains Mono">−</text>
+  <rect x="250" y="210" width="350" height="10" fill="#d6cfbf"/>`;
+  // holes rows: columns along x for rows 5..30
+  const rx=r=>250+(r-4)*12.5;
+  for(let r=5;r<=30;r++){for(let k=0;k<5;k++){g+=`<circle cx="${rx(r)}" cy="${100+k*20}" r="2.4" fill="#9b9384"/><circle cx="${rx(r)}" cy="${235+k*20}" r="2.4" fill="#9b9384"/>`;}
+    if(r%5===0) g+=`<text x="${rx(r)}" y="${92}" font-size="10" fill="#7a7364" text-anchor="middle" font-family="JetBrains Mono">${r}</text>`;}
+  // wires from arduino
+  g+=`<path d="M170 150 C 200 150, 205 48, 250 48" stroke="#ff4a4a" stroke-width="4" fill="none"/>
+  <path d="M170 190 C 210 190, 210 66, 250 66" stroke="#6cb6ff" stroke-width="4" fill="none"/>`;
+  // resistor row10 -> row14 at y=140 (col c)
+  g+=`<line x1="${rx(10)}" y1="140" x2="${rx(14)}" y2="140" stroke="#888" stroke-width="2.5"/>
+  <rect x="${rx(10)+13}" y="133" width="24" height="14" rx="6" fill="#d9b382" stroke="#a5824f"/>
+  <rect x="${rx(10)+17}" y="133" width="3" height="14" fill="#c00"/><rect x="${rx(10)+23}" y="133" width="3" height="14" fill="#c00"/><rect x="${rx(10)+29}" y="133" width="3" height="14" fill="#6b3a12"/>
+  <text x="${rx(12)}" y="128" font-size="11" fill="#333" text-anchor="middle" font-family="JetBrains Mono">220Ω</text>`;
+  // LED rows 14,15 at y=120 (col b)
+  g+=`<line x1="${rx(14)}" y1="120" x2="${rx(14)}" y2="106" stroke="#888" stroke-width="2"/><line x1="${rx(15)}" y1="120" x2="${rx(15)}" y2="106" stroke="#888" stroke-width="2"/>
+  <circle cx="${(rx(14)+rx(15))/2}" cy="100" r="11" fill="#ff4a4a" stroke="#a00"/>
+  <text x="${rx(14)-4}" y="132" font-size="10" fill="#a00" text-anchor="end" font-family="JetBrains Mono">+</text>`;
+  // jumper row15 (col a y=100?) to - rail
+  g+=`<path d="M${rx(15)} 180 C ${rx(15)+20} 150, ${rx(17)} 80, ${rx(17)} 66" stroke="#222" stroke-width="3.5" fill="none"/><circle cx="${rx(15)}" cy="180" r="3.5" fill="#222"/><circle cx="${rx(17)}" cy="66" r="3.5" fill="#222"/>`;
+  // button rows 20-22 straddling
+  g+=`<rect x="${rx(20)-8}" y="185" width="${rx(22)-rx(20)+16}" height="60" rx="4" fill="#333" stroke="#111"/><circle cx="${(rx(20)+rx(22))/2}" cy="215" r="11" fill="#777"/>`;
+  // + rail -> row 20 (col a, y=100)
+  g+=`<path d="M${rx(20)} 48 C ${rx(19)} 60, ${rx(19)} 90, ${rx(20)} 160" stroke="#ff4a4a" stroke-width="3.5" fill="none"/><circle cx="${rx(20)}" cy="160" r="3.5" fill="#ff4a4a"/>`;
+  // row 22 -> row 10 (yellow) — step 1
+  g+=`<path d="M${rx(22)} 160 C ${rx(20)} 300, ${rx(10)} 300, ${rx(10)} 160" stroke="#e5c100" stroke-width="3.5" fill="none" stroke-dasharray="0"/><circle cx="${rx(22)}" cy="160" r="3.5" fill="#e5c100"/><circle cx="${rx(10)}" cy="160" r="3.5" fill="#e5c100"/>
+  <text x="${rx(15)}" y="300" font-size="11" fill="#7a6400" text-anchor="middle" font-family="JetBrains Mono">Step 1 jumper (row 22 → row 10)</text>`;
+  // pin 9 ghost
+  g+=`<path d="M170 240 C 200 240, 210 360, 300 340 S ${rx(9)} 200, ${rx(10)} 180" stroke="#5cff9d" stroke-width="3" fill="none" stroke-dasharray="7 6"/>
+  <text x="300" y="362" font-size="11" fill="#1e6b44" font-family="JetBrains Mono">Step 2: pin 9 → row 10 replaces yellow</text>`;
+  s.innerHTML=g;
+})();
+
+// ---------- pot wiring diagram ----------
+(function(){
+  const s=$('#potWireSvg');
+  s.innerHTML=`
+  <rect x="10" y="30" width="400" height="290" rx="12" fill="#161b22" stroke="#2a323d"/>
+  <circle cx="210" cy="140" r="64" fill="#2b5aa8" stroke="#1d3f78" stroke-width="3"/>
+  <circle cx="210" cy="140" r="26" fill="#d8dde3" stroke="#9aa"/>
+  <line x1="210" y1="140" x2="210" y2="118" stroke="#333" stroke-width="5" stroke-linecap="round"/>
+  <text x="210" y="56" fill="#9aa6b4" text-anchor="middle" font-family="JetBrains Mono" font-size="13">10K = "103" · 100K = "104"</text>
+  <line x1="160" y1="200" x2="160" y2="240" stroke="#aab" stroke-width="5"/>
+  <line x1="210" y1="200" x2="210" y2="240" stroke="#aab" stroke-width="5"/>
+  <line x1="260" y1="200" x2="260" y2="240" stroke="#aab" stroke-width="5"/>
+  <rect x="140" y="190" width="140" height="14" rx="3" fill="#1d3f78"/>
+  <path d="M160 240 L160 280 L30 280" stroke="#ff4a4a" stroke-width="5" fill="none"/>
+  <path d="M260 240 L260 280 L392 280" stroke="#6cb6ff" stroke-width="5" fill="none"/>
+  <path d="M210 240 L210 305" stroke="#ffb347" stroke-width="5" fill="none"/>
+  <text x="30" y="270" fill="#ff4a4a" font-family="JetBrains Mono" font-size="14">+ rail (5V)</text>
+  <text x="392" y="270" fill="#6cb6ff" font-family="JetBrains Mono" font-size="14" text-anchor="end">− rail (GND)</text>
+  <text x="222" y="304" fill="#ffb347" font-family="JetBrains Mono" font-size="14">wiper → A0</text>
+  <text x="210" y="234" fill="#e9edf2" font-family="JetBrains Mono" font-size="11" text-anchor="middle">middle</text>`;
+})();
+
+// ---------- animation state ----------
+let last=performance.now(), T=0; // T: real ms
+// hero
+const hero=$('#heroLed');
+// hook
+let hookSim=0; const HOOK_HZ=490, HOOK_DUTY=0.3;
+function hookSpeed(){const v=+$('#hookSpeed').value; return Math.pow(10,-3*v/100);} // 1 .. 1/1000
+// slow
+let slowOn=500;
+const SEQ=[500,250,125,62,31,15,8,4,2,1];
+$('#slowHalf').onclick=()=>{const i=SEQ.indexOf(slowOn);slowOn=SEQ[Math.min(SEQ.length-1,i+1)];slowUI();};
+$('#slowReset').onclick=()=>{slowOn=500;slowUI();};
+function slowUI(){ $('#slowOn').textContent=slowOn+' ms'; $('#slowOff').textContent=slowOn+' ms'; const hz=1000/(2*slowOn); $('#slowHz').textContent=hz<10?hz.toFixed(1).replace(/\.0$/,''):Math.round(hz);}
+slowUI();
+// duty
+$('#dutySlider').oninput=dutyUI;
+function dutyUI(){const on=+$('#dutySlider').value; $('#dutyOnLbl').textContent=on;$('#dutyOffLbl').textContent=10-on;$('#dutyPct').textContent=(on*10)+'%';$('#dutyV').textContent=(on/10*5).toFixed(1)+' V';}
+dutyUI();
+// analogWrite
+$('#awSlider').oninput=awUI;
+function awUI(){const v=+$('#awSlider').value;$('#awLbl').textContent=v;const d=v/255;$('#awPct').textContent=(d*100).toFixed(1)+'%';$('#awV').textContent=(d*5).toFixed(2)+' V';
+  $('#awCode').innerHTML=`<span class="k">void</span> <span class="f">loop</span>() {\n  <span class="f">analogWrite</span>(<span class="n">9</span>, <span class="n">${v}</span>);\n}`;}
+awUI();
+// wave
+let waveVal=64, waveCtxReady=false;
+$$('[data-wave]').forEach(b=>b.onclick=()=>{$$('[data-wave]').forEach(x=>x.classList.remove('on'));b.classList.add('on');waveVal=+b.dataset.wave;resetWave();});
+function resetWave(){const c=$('#waveCanvas');const {ctx,w,h}=fit(c);ctx.clearRect(0,0,w,h);waveCtxReady=true;}
+// pot
+let potR=10000;
+$$('[data-pot]').forEach(b=>b.onclick=()=>{$$('[data-pot]').forEach(x=>x.classList.remove('on'));b.classList.add('on');potR=+b.dataset.pot;potUI();});
+$('#knob').oninput=potUI;
+function potUI(){
+  const f=+$('#knob').value/100; $('#knobLbl').textContent=Math.round(f*100)+'%';
+  const read=Math.round(f*1023), wr=Math.floor(read/4);
+  $('#pWiper').textContent=(f*5).toFixed(2)+' V';
+  $('#pRead').textContent=read;
+  $('#pWrite').textContent=wr;
+  $('#pDuty').textContent=(wr/255*100).toFixed(1)+'%';
+  $('#pI').textContent=(5/potR*1000).toFixed(2)+' mA';
+  const top=f, R=potR/1000;
+  const x0=40,x1=480,xw=x0+(1-f)*(x1-x0); // knob left(0%) = wiper at GND end? left->0V: wiper near GND (right side).
+  const s=$('#potSvg');
+  let zig='M'+x0+' 110';const n=18;for(let i=1;i<=n;i++){const x=x0+(x1-x0)*i/n;const y=110+(i===n?0:(i%2?-14:14));zig+=' L'+x.toFixed(1)+' '+y;}
+  s.innerHTML=`
+   <text x="${x0}" y="40" fill="#ff4a4a" font-family="JetBrains Mono" font-size="14">5 V</text>
+   <text x="${x1}" y="40" fill="#6cb6ff" font-family="JetBrains Mono" font-size="14" text-anchor="end">GND</text>
+   <line x1="${x0}" y1="48" x2="${x0}" y2="110" stroke="#ff4a4a" stroke-width="3"/>
+   <line x1="${x1}" y1="48" x2="${x1}" y2="110" stroke="#6cb6ff" stroke-width="3"/>
+   <path d="${zig}" stroke="#d7dee7" stroke-width="3" fill="none"/>
+   <text x="${(x0+x1)/2}" y="78" fill="#9aa6b4" font-family="JetBrains Mono" font-size="13" text-anchor="middle">${R>=100?'100,000':'10,000'} Ω total</text>
+   <path d="M${xw} 190 L${xw} 136 M${xw-9} 146 L${xw} 132 L${xw+9} 146" stroke="#ffb347" stroke-width="3.5" fill="none"/>
+   <text x="${xw}" y="206" fill="#ffb347" font-family="JetBrains Mono" font-size="13" text-anchor="middle">wiper → A0 = ${(f*5).toFixed(2)} V</text>`;
+}
+potUI();
+// motor
+let mFreq=3, mW=0, mAngle=0, mHist=[];
+$$('[data-mf]').forEach(b=>b.onclick=()=>{$$('[data-mf]').forEach(x=>x.classList.remove('on'));b.classList.add('on');mFreq=+b.dataset.mf;mHist=[];});
+$('#mSlider').oninput=()=>{$('#mLbl').textContent=$('#mSlider').value;};
+
+// ---------- main loop ----------
+function frame(now){
+  let dt=Math.min(50,now-last); last=now; T+=dt;
+  const s=cur;
+  if(s===0){ setLed(hero,0.5+0.5*Math.sin(T/700)); }
+  if(s===1){
+    const sp=hookSpeed(); hookSim+=dt*sp;
+    const eff=HOOK_HZ*sp; const P=1000/HOOK_HZ;
+    const lbl=sp>0.999?'normal':'1/'+Math.round(1/sp)+' speed';
+    $('#hookSpeedLbl').textContent=lbl;
+    if(eff>30){ setLed($('#hookLed'),HOOK_DUTY); }
+    else { const on=(hookSim%P)<HOOK_DUTY*P; setLed($('#hookLed'),on?1:0); }
+    $('#hookInfo').textContent= eff>30 ? `Flashing ${eff>=100?Math.round(eff):eff.toFixed(0)} times per second: too fast to see.` : `Now flashing ${eff<1?eff.toFixed(2):eff.toFixed(1)} times per second. On ${Math.round(HOOK_DUTY*100)}% of the time, off ${Math.round(100-HOOK_DUTY*100)}%.`;
+  }
+  if(s===6){
+    const c=$('#slowScope'),{ctx,w,h}=fit(c); grid(ctx,w,h);
+    const P=2*slowOn, hz=1000/P;
+    let t0,t1;
+    if(P>=100){ const win=Math.max(4*P,2000); t1=T; t0=T-win; $('#slowScopeNote').textContent='Scrolling in real time. Window = '+(win/1000).toFixed(win>=10000?0:1)+' s.'; }
+    else { t0=0;t1=8*P; $('#slowScopeNote').textContent='Too fast to scroll. This is a frozen snapshot of '+(8*P)+' ms.'; }
+    drawWave(ctx,w,h,t0,t1,P,slowOn); labels(ctx,w,h);
+    if(hz<=30){ setLed($('#slowLed'),((T%P)<slowOn)?1:0); } else setLed($('#slowLed'),0.5);
+  }
+  if(s===8){
+    const on=+$('#dutySlider').value;
+    const c=$('#dutyScope'),{ctx,w,h}=fit(c); grid(ctx,w,h);
+    drawWave(ctx,w,h,0,40,10,on); avgLine(ctx,w,h,on/10*5); labels(ctx,w,h);
+    ctx.fillStyle='#5f6d7a';ctx.font='12px JetBrains Mono, monospace';ctx.fillText('40 ms shown (4 cycles)',w-170,h-6);
+    setLed($('#dutyLed'),on/10);
+  }
+  if(s===10){
+    const v=+$('#awSlider').value, P=1000/490;
+    const c=$('#awScope'),{ctx,w,h}=fit(c); grid(ctx,w,h);
+    drawWave(ctx,w,h,0,4*P,P,v/255*P); avgLine(ctx,w,h,v/255*5); labels(ctx,w,h);
+    ctx.fillStyle='#5f6d7a';ctx.font='12px JetBrains Mono, monospace';ctx.fillText('≈ 8 ms shown (4 cycles)',w-180,h-6);
+    setLed($('#awLed'),v/255);
+  }
+  if(s===11){
+    const c=$('#waveCanvas'); if(!waveCtxReady) resetWave();
+    const {ctx,w,h}=fit(c);
+    ctx.globalCompositeOperation='destination-out';ctx.fillStyle='rgba(0,0,0,0.08)';ctx.fillRect(0,0,w,h);ctx.globalCompositeOperation='source-over';
+    const visHz=16, P=1000/visHz, duty=waveVal/255;
+    const pos=t=>{const sn=Math.sin(t/1000*2*Math.PI*0.5);return {x:w/2+(w/2-40)*sn, y:h*0.3+h*0.4*sn*sn};};
+    const steps=12;
+    ctx.lineCap='round';
+    for(let i=0;i<steps;i++){
+      const ta=T-dt+dt*i/steps, tb=T-dt+dt*(i+1)/steps, tm=(ta+tb)/2;
+      const on=duty>=1||((tm%P)<duty*P);
+      if(!on) continue;
+      const a=pos(ta),b=pos(tb);
+      ctx.strokeStyle='rgba(255,70,70,0.95)';ctx.lineWidth=7;
+      ctx.shadowColor='rgba(255,60,60,.9)';ctx.shadowBlur=8;
+      ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+    }
+    ctx.shadowBlur=0;
+  }
+  if(s===13){
+    const f=+$('#knob').value/100, wr=Math.floor(Math.round(f*1023)/4), P=1000/490;
+    setLed($('#potLed'),wr/255);
+    const c=$('#potScope'),{ctx,w,h}=fit(c); grid(ctx,w,h);
+    drawWave(ctx,w,h,0,4*P,P,wr/255*P);
+  }
+  if(s===15){
+    const v=+$('#mSlider').value, duty=v/255;
+    const P=1000/mFreq, onMs=duty*P;
+    const pinOn=duty>=1||(duty>0&&(T%P)<onMs);
+    const input = mFreq>100 ? duty : (pinOn?1:0);
+    const tau=180; mW+= (input-mW)*(1-Math.exp(-dt/tau));
+    mAngle+=mW*dt*0.018;
+    mHist.push([T,mW]); while(mHist.length&&mHist[0][0]<T-2000) mHist.shift();
+    const c=$('#motorScope'),{ctx,w,h}=fit(c); grid(ctx,w,h);
+    const t0=T-2000,t1=T;
+    if(mFreq>100){ // dense pulses: draw as band
+      ctx.fillStyle=`rgba(92,255,157,${0.12+0.5*duty})`;
+      if(duty>0) ctx.fillRect(0,yOf(5,h),w,yOf(0,h)-yOf(5,h));
+      ctx.fillStyle='#5cff9d';ctx.font='12px JetBrains Mono, monospace';ctx.fillText(duty>0&&duty<1?'≈ 980 pulses in this window (too dense to draw)':'',10,yOf(5,h)+16);
+    } else drawWave(ctx,w,h,t0,t1,P,onMs);
+    ctx.strokeStyle='#ffb347';ctx.lineWidth=3;ctx.beginPath();
+    mHist.forEach((p,i)=>{const x=(p[0]-t0)/2000*w, y=yOf(p[1]*5,h); i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();
+    labels(ctx,w,h);
+    // motor drawing
+    const m=$('#motorCanvas'),M=fit(m); const mc=M.ctx; mc.clearRect(0,0,M.w,M.h);
+    const cx=M.w/2, cy=M.h/2, R=Math.min(M.w,M.h)/2-14;
+    mc.fillStyle='#ffd23f';mc.strokeStyle='#b38e00';mc.lineWidth=3;
+    mc.beginPath();mc.roundRect?mc.roundRect(cx-R*1.25,cy-R*0.55,R*0.9,R*1.1,10):mc.rect(cx-R*1.25,cy-R*0.55,R*0.9,R*1.1);mc.fill();mc.stroke();
+    mc.fillStyle='#4a2a00';mc.font='12px JetBrains Mono, monospace';mc.fillText('TT',cx-R*0.95,cy+4);
+    const wx=cx+R*0.35;
+    mc.fillStyle='#222';mc.beginPath();mc.arc(wx,cy,R*0.8,0,7);mc.fill();
+    mc.fillStyle='#444';mc.beginPath();mc.arc(wx,cy,R*0.55,0,7);mc.fill();
+    mc.strokeStyle='#ffb347';mc.lineWidth=5;
+    for(let k=0;k<3;k++){const a=mAngle+k*2.094;mc.beginPath();mc.moveTo(wx,cy);mc.lineTo(wx+Math.cos(a)*R*0.55,cy+Math.sin(a)*R*0.55);mc.stroke();}
+    mc.fillStyle='#ddd';mc.beginPath();mc.arc(wx,cy,6,0,7);mc.fill();
+    mc.fillStyle='#9aa6b4';mc.fillText('speed '+Math.round(mW*100)+'%',8,M.h-6);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+window.addEventListener('resize',()=>{waveCtxReady=false;});
+</script>
+</body>
+</html>
